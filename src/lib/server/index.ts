@@ -5,7 +5,7 @@ import {
   getSkipTake,
 } from './pagination';
 import { prisma } from './prisma';
-import CustomResponse from './response';
+import { ErrorResponse } from './response';
 
-export { CustomResponse, createPaginationResponse, getPaginationParams, getSkipTake, prisma };
-export type { PaginationResponse };
+export { createPaginationResponse, getPaginationParams, getSkipTake, prisma };
+export type { ErrorResponse, PaginationResponse };

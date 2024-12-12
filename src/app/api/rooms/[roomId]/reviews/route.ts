@@ -1,8 +1,7 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { CustomError, UnAuthorizedError } from '@/errors';
 import {
-  CustomResponse,
+  ErrorResponse,
   PaginationResponse,
   createPaginationResponse,
   getPaginationParams,
@@ -16,7 +15,7 @@ import { Review, ReviewParams } from '@/types/review';
 export async function GET(
   request: NextRequest,
   { params }: { params: ReviewParams },
-): Promise<CustomResponse<PaginationResponse<Review> | undefined>> {
+): Promise<NextResponse<PaginationResponse<Review> | ErrorResponse>> {
   try {
     const roomId = +params.roomId;
     const { page, limit } = getPaginationParams(request);
@@ -24,42 +23,46 @@ export async function GET(
 
     const [reviews, total] = await getReviews(roomId, skip, take);
 
-    return CustomResponse.ok(createPaginationResponse(reviews, total, page, limit));
-  } catch (error) {
-    console.error('리뷰 목록 조회 중 에러 발생: ', {
-      roomId: params.roomId,
-      error: error,
+    return NextResponse.json({
+      ...createPaginationResponse<Review>(reviews, total, page, limit),
     });
-
-    return CustomResponse.errors();
+  } catch (error) {
+    return NextResponse.json({ error: '리뷰 목록을 가져오는데 실패했습니다.' }, { status: 500 });
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: ReviewParams }) {
-  const session = await auth();
+export async function POST(
+  request: NextRequest,
+  { params }: { params: ReviewParams },
+): Promise<NextResponse> {
   try {
+    const session = await auth();
+
     if (!session) {
-      throw new UnAuthorizedError();
+      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
     }
 
     const roomId = +params.roomId;
     const data = createReviewSchema.parse(await request.json());
 
-    await createReview(roomId, session.user.id, data);
-    return CustomResponse.created();
-  } catch (error) {
-    console.error('리뷰 생성 중 에러 발생: ', {
-      roomId: params.roomId,
-      userId: session?.user.id,
-      error: error,
-    });
+    await createReview(roomId, session.user.id, data.rating, data.content);
 
+    return NextResponse.json(
+      {
+        success: true,
+        message: '리뷰가 성공적으로 생성되었습니다.',
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    console.error(error);
     if (error instanceof z.ZodError) {
-      return CustomResponse.zod('잘못된 요청 데이터입니다.', 400, error.errors);
-    } else if (error instanceof CustomError) {
-      return CustomResponse.errors(error.message, error.statusCode);
+      return NextResponse.json(
+        { error: '잘못된 요청 데이터입니다.', details: error.errors },
+        { status: 400 },
+      );
     }
 
-    return CustomResponse.errors();
+    return NextResponse.json({ error: '리뷰 생성에 실패했습니다.' }, { status: 500 });
   }
 }

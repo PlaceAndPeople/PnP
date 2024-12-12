@@ -1,23 +1,18 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { CustomError, UnAuthorizedError } from '@/errors';
-import { CustomResponse } from '@/lib/server';
 import { updateReviewSchema } from '@/schemas/review';
 import { deleteReview, updateReview } from '@/services/review';
-import { z } from 'zod';
 
 interface Params {
   reviewId: string;
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Params },
-): Promise<CustomResponse<undefined>> {
-  const session = await auth();
+export async function PATCH(request: NextRequest, { params }: { params: Params }) {
   try {
+    const session = await auth();
+
     if (!session) {
-      throw new UnAuthorizedError();
+      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
     }
 
     const data = updateReviewSchema.parse(await request.json());
@@ -26,48 +21,27 @@ export async function PATCH(
 
     // TODO: 만약, reviewId에 해당하는 리뷰가 없다면 404 에러를 번환 처리해야할까?
     // TODO: 만약, reviewId에 해당하는 리뷰는 있지만, 현재 로그인한 사용자가 작성한 리뷰가 아니라면 403 에러를 반환 처리해야할까?
-    await updateReview(reviewId, session.user.id, data);
-
-    return CustomResponse.empty();
+    await updateReview(reviewId, session.user.id, data.rating, data.content);
   } catch (error) {
-    console.error('리뷰 수정 중 에러 발생: ', {
-      reviewId: params.reviewId,
-      userId: session?.user.id,
-      error: error,
-    });
-
-    if (error instanceof z.ZodError) {
-      return CustomResponse.zod('잘못된 요청 데이터입니다.', 400, error.errors);
-    } else if (error instanceof CustomError) {
-      return CustomResponse.errors(error.message, error.statusCode);
-    }
-
-    return CustomResponse.errors();
+    console.error(error);
+    return NextResponse.json({ error: '리뷰 수정 실패' }, { status: 500 });
   }
 }
 
-export async function DELETE({ params }: { params: Params }): Promise<CustomResponse<undefined>> {
-  const session = await auth();
+export async function DELETE(request: NextRequest, { params }: { params: Params }) {
   try {
+    const session = await auth();
+
     if (!session) {
-      throw new UnAuthorizedError();
+      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
     }
 
     const reviewId = +params.reviewId;
     await deleteReview(reviewId, session.user.id);
 
-    return CustomResponse.deleted();
+    return NextResponse.json({ success: true, message: '리뷰 삭제 완료' }, { status: 204 });
   } catch (error) {
-    console.error('리뷰 삭제 중 에러 발생: ', {
-      reviewId: params.reviewId,
-      userId: session?.user.id,
-      error: error,
-    });
-
-    if (error instanceof CustomError) {
-      return CustomResponse.errors(error.message, error.statusCode);
-    }
-
-    return CustomResponse.errors();
+    console.error(error);
+    return NextResponse.json({ error: '리뷰 삭제 실패' }, { status: 500 });
   }
 }
